@@ -1,15 +1,16 @@
 import wiringpi as pi
 import time
+from typing import Union
 
 def int_to_binary(n: int, bits: int = 8):
     return ''.join([str(n >> i & 1 ) for i in reversed(range(0, bits))])
 
-def bytes_to_binary(data: bytearray):
+def bytes_to_binary(data: Union[bytearray,bytes]):
     return ','.join([int_to_binary(byte) for byte in data])
 
 def main(debug: bool, chip_select: int, channel: int):
     SPI_SPEED = 1000000  # 1MHz
-    VREF = 3.3  # ADコンバータの基準電圧
+    VREF = 3.3  # A/Dコンバータの基準電圧
 
     pi.wiringPiSPISetup(chip_select, SPI_SPEED)
     while True:

@@ -56,5 +56,5 @@ pip install -r requirements.txt
 - [pigpio](https://pypi.org/project/pigpio/)
   - Cライブラリによるpigpio daemonというデーモン経由でGPIOを操作するらしい
   - [Pythonインターフェース](http://abyz.me.uk/rpi/pigpio/python.html)
-- [wiringpi](https://pypi.org/project/wiringpi/)
+- [wiringpi](https://github.com/WiringPi/WiringPi-Python)
   開発中止?
