@@ -1,0 +1,5 @@
+#!/bin/bash
+
+set -ueo pipefail
+SRC_DIR=$(cd $(dirname $0)/../src; pwd)
+( cd $SRC_DIR; python main.py $@ )

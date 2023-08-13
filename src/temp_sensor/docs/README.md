@@ -6,7 +6,7 @@
 
 ## MCP3002
 
-10Bit A/Dコンバーター (SPIシリアルインターフェース)
+10Bit A/Dコンバーター (SPI: Serial Peripheral Interface)
 
 [データシート](https://akizukidenshi.com/download/ds/microchip/mcp3002.pdf)
 
@@ -100,6 +100,11 @@ CS/SHDN  CH0 CH1  VSS
     - 温度センサーのアナログアウトプット(300mV(-30℃)~1600mV(100℃))
 1. GND: ラズパイのGND端子に接続
 
-# 回路図
+# ■ 回路図
 
 ![](img/fig_00.png)
+
+
+# ■ SPIについて
+
+[SPIの基本を学ぶ](https://www.analog.com/jp/analog-dialogue/articles/introduction-to-spi-interface.html)
