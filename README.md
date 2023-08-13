@@ -48,7 +48,7 @@ pip install -r requirements.txt
 ./bin/cli --help
 
 # 温度センサー
-./bin/cli temp
+./bin/cli --debug temp-pigpio --chip-select 0 --channel 0
 ```
 
 # 利用しているライブラリ

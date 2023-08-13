@@ -9,7 +9,7 @@ def bytes_to_binary(data: Union[bytearray,bytes]):
     return ','.join([int_to_binary(byte) for byte in data])
 
 def main(debug: bool, chip_select: int, channel: int):
-    SPI_SPEED = 1000000  # 1MHz
+    SPI_SPEED = 50000  # 50KHz
     VREF = 3.3  # A/Dコンバータの基準電圧
 
     pi.wiringPiSPISetup(chip_select, SPI_SPEED)
