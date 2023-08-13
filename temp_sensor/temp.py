@@ -60,7 +60,7 @@ while True:
     #temp = (volt - 0.5) / 0.01
 
     # LM61CIZ
-    #   データシート: https://www.ti.com/cn/lit/ds/symlink/lm61.pdf
+    #   データシート: https://www.ti.com/jp/lit/ds/symlink/lm61.pdf
     #   - -30℃~100℃ に対応する 300mV~1600mV の電圧を出力します。
     #   - 0℃の時は600mV
     #   - 1℃につき 10mV 増減する
