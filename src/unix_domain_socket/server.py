@@ -1,6 +1,7 @@
 import os
 import socket
 
+# 今更ながらソケット通信に入門する（Pythonによる実装例付き）| Qiita
 # https://qiita.com/t_katsumura/items/a83431671a41d9b6358f
 class BlockingServerBase:
     def __init__(self, timeout:int=60, buffer:int=1024):

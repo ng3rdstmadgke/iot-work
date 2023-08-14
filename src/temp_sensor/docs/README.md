@@ -45,7 +45,15 @@ CS/SHDN  CH0 CH1  VSS
 
 ### データの送受信
 
-#### MSBファーストフォーマットのみ利用するする場合のデータの送受信
+送信するデータは2バイトで、受信するデータも2バイト。受信データはMSBファーストフォーマットで受け取ることができる。(オプションでLSBファーストフォーマットでの受け取りも可能らしい。)
+今回はMSBファーストフォーマットでのみデータを受信する方式を利用する。
+
+データシートを確認すると、データの送受信の図があったので見方をざっくり調べてみた。
+
+- CS: ラズパイのCE0(CE1)端子(MCP3002のCS/SHDN端子に接続されている)の電位。LOWに設定するのが通信開始の合図。
+- CLK: クロック。この図だとアイドルクロックはLOWになっている。(後述のSPIモードを調べるときに重要になってくる)
+- DIN: ラズパイ -> A/Dコンバータに送信するデータ (bit単位)
+- DOUT: A/Dコンバータ -> ラズパイに送信するデータ (bit単位)
 
 ![fig_01](img/fig_01.png)
 
@@ -123,18 +131,19 @@ CS/SHDN  CH0 CH1  VSS
 ![](img/fig_00.png)
 
 
-# ■ SPIについて
+# ■ SPIモードがよく分からなかったので調べてみた
 
+記事としてはこのあたりがわかりやすい
+- [SPIの基本を学ぶ](https://www.analog.com/jp/analog-dialogue/articles/introduction-to-spi-interface.html)
+- [シリアル・ペリフェラル・インターフェース | wiki](https://ja.wikipedia.org/wiki/%E3%82%B7%E3%83%AA%E3%82%A2%E3%83%AB%E3%83%BB%E3%83%9A%E3%83%AA%E3%83%95%E3%82%A7%E3%83%A9%E3%83%AB%E3%83%BB%E3%82%A4%E3%83%B3%E3%82%BF%E3%83%95%E3%82%A7%E3%83%BC%E3%82%B9)
 
-
-### SPIモードの決定
-
-SPIメイン(ラズパイ)はクロックの極性と位相を選択できる。
-まあ、早い話がアイドル時のクロックがHIGHかLOWかも選択できて、クロックがHIGHになるときにデータを読み込むか、LOWになるときにデータを読み込むかを選択できるということ。
+SPIメイン(ラズパイ)はクロックの極性と位相を選択できるとのことだが、、、
+早い話がアイドル時のクロックがHIGHかLOWかも選択できて、クロックがHIGHになるときにデータを読み込むか、LOWになるときにデータを読み込むかを選択できるということ。
 
 この、アイドル時のクロック(HIGH, LOW)、データをいつ読み込むか(HIGH, LOW) の組み合わせで4つのモード(SPIモード)を選択できる。
 
-ちなみに、アイドル時のクロックを設定するオプションをCPOLビット、データをいつ読み込むかを設定するオプションをCPHAビットと呼ぶ
+ちなみに、アイドル時のクロックを設定するオプションを `CPOLビット` 、データをいつ読み込むかを設定するオプションを `CPHAビット` と呼びまとめると↓のような感じ。
+
 
 
 | SPIモード | CPOLビット | CPHAビット | 説明 |
@@ -157,10 +166,13 @@ SPIメイン(ラズパイ)はクロックの極性と位相を選択できる。
 
 # 参考
 
-- SPIについて
+- ラズパイのピン配置
+    - [Raspberry Pi Pinout](https://pinout.xyz/pinout/spi)
+- SPI関連
     - [SPIの基本を学ぶ](https://www.analog.com/jp/analog-dialogue/articles/introduction-to-spi-interface.html)
     - [シリアル・ペリフェラル・インターフェース | wiki](https://ja.wikipedia.org/wiki/%E3%82%B7%E3%83%AA%E3%82%A2%E3%83%AB%E3%83%BB%E3%83%9A%E3%83%AA%E3%83%95%E3%82%A7%E3%83%A9%E3%83%AB%E3%83%BB%E3%82%A4%E3%83%B3%E3%82%BF%E3%83%95%E3%82%A7%E3%83%BC%E3%82%B9)
 - pigpio関連
+    - [pigpio (公式)](http://abyz.me.uk/rpi/pigpio/python.html)
     - [A-Dコンバータ　その1　10ビットSPI MCP3002 | TOPに戻る作りながら学ぶArduino+=電子工作入門](https://www.denshi.club/cookbook/adda/adc/a-d110spi-mcp3002.html)
     - [pigpioによるI2CとSPIインタフェースの実装 | TomoSoft](https://tomosoft.jp/design/?p=10477)
     - [SPI - Raspberry Pi用pigpio Librar | 腰も砕けよ 膝も折れよ](https://decafish.blog.ss-blog.jp/2016-12-11)
