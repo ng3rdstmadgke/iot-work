@@ -24,10 +24,10 @@ DIGIT_GPIO = [20, 19, 18, 17]
 
 def init_gpio(pi):
     """gpioをリセットす関数"""
-    for gpio in DIGIT_GPIO:
-        pi.write(gpio, 1)
     for gpio in SEG_GPIO:
         pi.write(gpio, 0)
+    for gpio in DIGIT_GPIO:
+        pi.write(gpio, 1)
 
 
 def display(pi, data: list[int]):
@@ -37,7 +37,7 @@ def display(pi, data: list[int]):
             pi.write(DIGIT_GPIO[digit], 0)
             for i in range(0, 7):
                 pi.write(SEG_GPIO[i], (SEG_SHAPE[n] >> i) & 1)
-            time.sleep(0.0001)
+            time.sleep(0.001)
 
             # リセット
             for i in SEG_GPIO:
@@ -63,6 +63,7 @@ def counter(data: list[int]):
         refresh(cnt, data)
 
 def main():
+
     pi = pigpio.pi()
     if not pi.connected:
         raise Exception("pigpio connection faild...")
@@ -73,19 +74,19 @@ def main():
 
     # GPIOの初期化
     init_gpio(pi)
-    try:
-        data = [0, 0, 0, 0]
-        # カウンターと表示は別スレッドで動かす
-        with ThreadPoolExecutor(max_workers=2) as executor:
-            display_result = executor.submit(display, pi, data)
-            counter_result = executor.submit(counter, data)
-            display_result.result()
-            counter_result.result()
-    finally:
-        init_gpio(pi)
-        pi.stop()
-        print("[info] closed.")
+    data = [0, 0, 0, 0]
+    # カウンターと表示は別スレッドで動かす
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        display_future = executor.submit(display, pi, data)
+        counter_future = executor.submit(counter, data)
+        try:
+            counter_future.result()
+            display_future.result()
+        finally:
+            init_gpio(pi)
+            pi.stop()
+            print("[INFO] GPIO close.")
 
 
 if __name__ == "__main__":
-    main() 
+    main()
