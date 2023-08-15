@@ -125,7 +125,7 @@ def main():
 
     # GPIOの初期化
     init_gpio(pi)
-    # カウンターと表示は別スレッドで動かす
+    # 温度測定とディスプレイ表示は別スレッドで動かす
     with ThreadPoolExecutor(max_workers=2) as executor:
         data = [0, 0, 0, 0]  # 各桁の点灯するセグメントがbitで格納される(displayとtaskの共有データ)
         display_future = executor.submit(display, pi, data)
