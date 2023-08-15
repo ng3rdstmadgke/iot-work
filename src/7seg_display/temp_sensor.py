@@ -29,45 +29,59 @@ DP_GPIO = 6
 # 表示する桁を制御するGPIO (4桁目 -> 1桁目 の順)
 DIGIT_GPIO = [20, 19, 18, 17]
 
-
 def display(pi, data: list[int]):
     """ダイナミック制御で4桁の7セグを表示する関数"""
     while True:
+        # 各桁を順番に高速で点灯させることで全桁表示しているように見せる
         for digit, seg_shape in enumerate(data):
             ############################
             # 点灯
             ############################
-            # カソード側: LOWに設定
+            # カソード側: LOW
             pi.write(DIGIT_GPIO[digit], 0)
 
-            # アノード側(7セグ表示): (点灯するセグメントに対応するGPIOをHIGHに設定)
+            # アノード側(7セグ表示): (点灯するセグメントに対応するGPIOをHIGHにする)
             for i in range(0, 7):
                 pi.write(SEG_GPIO[i], (seg_shape >> i) & 1)
-            # アノード側(ドット表示): (最上位ビットが1ならドットに対応するGPIOをHIGHに設定)
+
+            # アノード側(ドット表示): (最上位ビットが1ならドットに対応するGPIOをHIGHにする)
             pi.write(DP_GPIO, (seg_shape >> 7) & 1)
+
             time.sleep(0.001)
 
             ############################
             # 消灯
             ############################
-            # アノード側: すべてのGPIOをLOWに設定
+            # アノード側: すべてのGPIOをLOWにする
             for i in SEG_GPIO:
                 pi.write(i, 0)
             pi.write(DP_GPIO, (seg_shape >> 7) & 0)
 
-            # カソード側: HIGHに設定
+            # カソード側: HIGH
             pi.write(DIGIT_GPIO[digit], 1)
 
-
-def counter(data: list[int]):
-    """表示する数字をインクリメントする関数"""
-    cnt = -110
-    while cnt < 10000:
-        time.sleep(0.1)
-        cnt = round(cnt, 2) + 0.1
-        ret = refresh(cnt, data)
-        print(f"{cnt}: '{ret}', {[bin(i) for i in data]}")
-
+def task(pi, spi_handler, data: list[int]):
+    VREF = 3.3  # A/Dコンバータの基準電圧
+    CHANNEL = 0  # MCP3002のCH0端子,CH1端子どちらを利用するか
+    while True:
+        # 1bit: 0固定
+        # 2bit: スタートビット (1固定)
+        # 3bit: SGL/DIFF: 動作モード。疑似差動モード(0)、シングルエンドモード(1)
+        # 4bit: ODD/SIGN: MCP3002で利用するチャンネル。 CH0(0), CH1(1)
+        # 5bit: MSBF: 受信データの形式。MSBF + LSBF(0), MSBFのみ(1)、
+        write_data = 0b0110100000000000
+        write_data = write_data | (0b1 * CHANNEL) << 12  # ODD/SIGN: 入力されたチャンネルで設定
+        write_data = write_data.to_bytes(2, "big")
+        cnt, read_data = pi.spi_xfer(spi_handler, write_data)
+        if cnt != 2:
+            print("[error] skip.")
+            continue
+        value = int.from_bytes(read_data, "big") & 0b1111111111  # 10ビットを値として取り出す
+        volt = (value / 1023.0) * VREF  # 温度センサーから入力された電圧
+        temp = (volt - 0.6) / 0.01  # 電圧を温度に変換。(0℃で600mV , 1℃につき10mV増減)
+        refresh(temp, data)
+        print(f"value: {value}, volt: {volt}, temp: {temp}")
+        time.sleep(3)
 
 def refresh(f: float, data: list[int]):
     # -999 ~ 9999
@@ -86,7 +100,6 @@ def refresh(f: float, data: list[int]):
         idx = idx + 1
     return f"{ip}.{fp}"
 
-
 def init_gpio(pi):
     """gpioをリセットす関数"""
     for gpio in SEG_GPIO:
@@ -94,11 +107,18 @@ def init_gpio(pi):
     for gpio in DIGIT_GPIO:
         pi.write(gpio, 1)
 
-
 def main():
+
     pi = pigpio.pi()
     if not pi.connected:
         raise Exception("pigpio connection faild...")
+
+    # SPIオープン
+    CHIP_SELECT = 0  # ラズパイの CE0端子, CE1端子どちらに接続するか
+    SPI_MODE = 0b00  # SPIモード0を設定。アイドル時のクロックはLOW(CPOL=0)、クロックがHIGHになるときにデータをサンプリング(CPHA=0)
+    OPTION = 0b0 | SPI_MODE
+    CLOCK_SPEED = 50000  # 50KHz
+    spi_handler = pi.spi_open(CHIP_SELECT, CLOCK_SPEED, OPTION)
 
     # すべてのGPIOをOUTPUTに設定
     for gpio in SEG_GPIO + DIGIT_GPIO:
@@ -106,15 +126,16 @@ def main():
 
     # GPIOの初期化
     init_gpio(pi)
-    # カウンターと表示は別スレッドで動かす
+    # 温度測定とディスプレイ表示は別スレッドで動かす
     with ThreadPoolExecutor(max_workers=2) as executor:
         data = [0, 0, 0, 0]  # 各桁の点灯するセグメントがbitで格納される(displayとtaskの共有データ)
         display_future = executor.submit(display, pi, data)
-        counter_future = executor.submit(counter, data)
+        counter_future = executor.submit(task, pi, spi_handler, data)
         try:
             counter_future.result()
             display_future.result()
         finally:
+            pi.spi_close(spi_handler)
             init_gpio(pi)
             pi.stop()
             print("[INFO] GPIO close.")
