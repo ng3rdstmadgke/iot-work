@@ -22,61 +22,44 @@ SEG_SHAPE = {
     "":   0b0000000,
 }
 
-# 7セグ表示に利用するGPIO (a -> gの順)
+# 7セグ表示を制御するGPIO (a -> gの順)
 SEG_GPIO = [21, 22, 23, 24, 25, 26, 27]
+# "." 表示を制御するGPIO
+DP_GPIO = 6
 # 表示する桁を制御するGPIO (4桁目 -> 1桁目 の順)
 DIGIT_GPIO = [20, 19, 18, 17]
-DP_GPIO = 6
-
-def init_gpio(pi):
-    """gpioをリセットす関数"""
-    for gpio in SEG_GPIO:
-        pi.write(gpio, 0)
-    for gpio in DIGIT_GPIO:
-        pi.write(gpio, 1)
-
 
 def display(pi, data: list[int]):
     """ダイナミック制御で4桁の7セグを表示する関数"""
     while True:
-
         for digit, seg_shape in enumerate(data):
-            #print([bin(i) for i in data])
+            ############################
+            # 点灯
+            ############################
+            # カソード側: LOW
             pi.write(DIGIT_GPIO[digit], 0)
+
+            # アノード側(7セグ表示): (点灯するセグメントに対応するGPIOをHIGHにする)
             for i in range(0, 7):
                 pi.write(SEG_GPIO[i], (seg_shape >> i) & 1)
+
+            # アノード側(ドット表示): (最上位ビットが1ならドットに対応するGPIOをHIGHにする)
             pi.write(DP_GPIO, (seg_shape >> 7) & 1)
+
             time.sleep(0.001)
 
-            # リセット
+            ############################
+            # 消灯
+            ############################
+            # アノード側: すべてのGPIOをLOWにする
             for i in SEG_GPIO:
                 pi.write(i, 0)
             pi.write(DP_GPIO, (seg_shape >> 7) & 0)
 
-            # 消灯
+            # カソード側: HIGH
             pi.write(DIGIT_GPIO[digit], 1)
 
-def refresh(f: float, data: list[int]):
-    fr = round(f, 1)
-    if fr >= 1000 or fr <= -100:
-        fs = "EEEE"
-    else:
-        fs = str(round(f, 1))
-        fs = f"{fs: >5}" if "." in fs else f"{fs: >4}"
-        #print(f"fs: '{fs}'")
-    data_idx = 0
-    for e in fs:
-        if e == ".":
-            # .の場合は直前の要素にドットフラグを設定する
-            data[data_idx - 1] = data[data_idx - 1] | 1 << 7
-            #print(f"e: {e}, data[{data_idx} - 1]: {bin(data[data_idx - 1])}")
-        else:
-            data[data_idx] = SEG_SHAPE[e]
-            #print(f"e: {e}, data[{data_idx}]: {bin(data[data_idx])}")
-            data_idx = data_idx + 1
-
-
-def temp_sensor(pi, spi_handler, data: list[int]):
+def task(pi, spi_handler, data: list[int]):
     VREF = 3.3  # A/Dコンバータの基準電圧
     CHANNEL = 0  # MCP3002のCH0端子,CH1端子どちらを利用するか
     while True:
@@ -99,6 +82,30 @@ def temp_sensor(pi, spi_handler, data: list[int]):
         print(f"value: {value}, volt: {volt}, temp: {temp}")
         time.sleep(3)
 
+def refresh(f: float, data: list[int]):
+    # -999 ~ 9999
+    data_len = len(data)
+    ip, fp = str(round(float(f), 3)).split(".")
+    fp = fp[:data_len - len(ip)].ljust(data_len - len(ip), "0")
+    idx = 0
+    for e in ip:
+        data[idx] = SEG_SHAPE[e]
+        idx = idx + 1
+    if idx == 4:
+        return ip
+    data[idx - 1] = data[idx - 1] | 1 << 7 # 小数点を付与
+    for e in fp:
+        data[idx] = SEG_SHAPE[e]
+        idx = idx + 1
+    return f"{ip}.{fp}"
+
+def init_gpio(pi):
+    """gpioをリセットす関数"""
+    for gpio in SEG_GPIO:
+        pi.write(gpio, 0)
+    for gpio in DIGIT_GPIO:
+        pi.write(gpio, 1)
+
 def main():
 
     pi = pigpio.pi()
@@ -118,11 +125,11 @@ def main():
 
     # GPIOの初期化
     init_gpio(pi)
-    data = [0, 0, 0, 0]
     # カウンターと表示は別スレッドで動かす
     with ThreadPoolExecutor(max_workers=2) as executor:
+        data = [0, 0, 0, 0]  # 各桁の点灯するセグメントがbitで格納される(displayとtaskの共有データ)
         display_future = executor.submit(display, pi, data)
-        counter_future = executor.submit(temp_sensor, pi, spi_handler, data)
+        counter_future = executor.submit(task, pi, spi_handler, data)
         try:
             counter_future.result()
             display_future.result()
