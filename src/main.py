@@ -45,5 +45,17 @@ def temp_pigpio(context, chip_select, channel):
         channel=channel,
     )
 
+@cli.command()
+@click.pass_context
+def display_counter(context):
+    from display import counter
+    counter.main()
+
+@cli.command()
+@click.pass_context
+def display_temp_sensor(context):
+    from display import temp_sensor
+    temp_sensor.main()
+
 if __name__ == "__main__":
     cli()
