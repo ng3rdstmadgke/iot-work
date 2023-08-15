@@ -234,7 +234,7 @@ if __name__ == "__main__":
 
 とりあえず動いた。
 
-![display_counter](img/display_counter_md.gif)
+![display_counter](img/display_counter.gif)
 
 
 
