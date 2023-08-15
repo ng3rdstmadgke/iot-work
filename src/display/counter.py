@@ -62,7 +62,7 @@ def display(pi, data: list[int]):
 
 def counter(data: list[int]):
     """表示する数字をインクリメントする関数"""
-    cnt = -110
+    cnt = -15
     while cnt < 10000:
         time.sleep(0.1)
         cnt = round(cnt, 2) + 0.1
