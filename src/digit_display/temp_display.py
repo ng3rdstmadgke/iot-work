@@ -76,19 +76,41 @@ def refresh(f: float, data: list[int]):
             data_idx = data_idx + 1
 
 
-def counter(data: list[int]):
-    """表示する数字をインクリメントする関数"""
-    cnt = -99.0
-    while cnt < 1000:
-        time.sleep(0.1)
-        cnt = cnt + 0.1
-        refresh(cnt, data)
+def temp_sensor(pi, spi_handler, data: list[int]):
+    VREF = 3.3  # A/Dコンバータの基準電圧
+    CHANNEL = 0  # MCP3002のCH0端子,CH1端子どちらを利用するか
+    while True:
+        # 1bit: 0固定
+        # 2bit: スタートビット (1固定)
+        # 3bit: SGL/DIFF: 動作モード。疑似差動モード(0)、シングルエンドモード(1)
+        # 4bit: ODD/SIGN: MCP3002で利用するチャンネル。 CH0(0), CH1(1)
+        # 5bit: MSBF: 受信データの形式。MSBF + LSBF(0), MSBFのみ(1)、
+        write_data = 0b0110100000000000
+        write_data = write_data | (0b1 * CHANNEL) << 12  # ODD/SIGN: 入力されたチャンネルで設定
+        write_data = write_data.to_bytes(2, "big")
+        cnt, read_data = pi.spi_xfer(spi_handler, write_data)
+        if cnt != 2:
+            print("[error] skip.")
+            continue
+        value = int.from_bytes(read_data, "big") & 0b1111111111  # 10ビットを値として取り出す
+        volt = (value / 1023.0) * VREF  # 温度センサーから入力された電圧
+        temp = (volt - 0.6) / 0.01  # 電圧を温度に変換。(0℃で600mV , 1℃につき10mV増減)
+        refresh(temp, data)
+        print(f"value: {value}, volt: {volt}, temp: {temp}")
+        time.sleep(3)
 
 def main():
 
     pi = pigpio.pi()
     if not pi.connected:
         raise Exception("pigpio connection faild...")
+
+    # SPIオープン
+    CHIP_SELECT = 0  # ラズパイの CE0端子, CE1端子どちらに接続するか
+    SPI_MODE = 0b00  # SPIモード0を設定。アイドル時のクロックはLOW(CPOL=0)、クロックがHIGHになるときにデータをサンプリング(CPHA=0)
+    OPTION = 0b0 | SPI_MODE
+    CLOCK_SPEED = 50000  # 50KHz
+    spi_handler = pi.spi_open(CHIP_SELECT, CLOCK_SPEED, OPTION)
 
     # すべてのGPIOをOUTPUTに設定
     for gpio in SEG_GPIO + DIGIT_GPIO:
@@ -100,11 +122,12 @@ def main():
     # カウンターと表示は別スレッドで動かす
     with ThreadPoolExecutor(max_workers=2) as executor:
         display_future = executor.submit(display, pi, data)
-        counter_future = executor.submit(counter, data)
+        counter_future = executor.submit(temp_sensor, pi, spi_handler, data)
         try:
             counter_future.result()
             display_future.result()
         finally:
+            pi.spi_close(spi_handler)
             init_gpio(pi)
             pi.stop()
             print("[INFO] GPIO close.")
