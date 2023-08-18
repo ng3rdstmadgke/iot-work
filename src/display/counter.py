@@ -92,6 +92,7 @@ def init_gpio(pi):
     """gpioをリセットす関数"""
     for gpio in SEG_GPIO:
         pi.write(gpio, 0)
+    pi.write(DP_GPIO, 0)
     for gpio in DIGIT_GPIO:
         pi.write(gpio, 1)
 
