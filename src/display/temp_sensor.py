@@ -102,8 +102,9 @@ def refresh(f: float, data: list[int]):
 
 def init_gpio(pi):
     """gpioをリセットす関数"""
+    pi.write(DP_GPIO, 1)
     for gpio in SEG_GPIO:
-        pi.write(gpio, 0)
+        pi.write(gpio, 1)
     for gpio in DIGIT_GPIO:
         pi.write(gpio, 1)
 
