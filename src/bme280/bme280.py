@@ -1,5 +1,7 @@
+# データシート
+#   - https://akizukidenshi.com/download/ds/bosch/BST-BME280_DS001-10.pdf
 import time
-from typing import Union, List
+from typing import Union, List, Tuple
 import pigpio
 from pprint import pprint
 from collections import OrderedDict
@@ -74,7 +76,7 @@ def read_calibration_data(pi, spi_handler):
     pprint(cal_data)
     return cal_data
 
-def read_temp(pi, spi_handler, cal_data: OrderedDict):
+def read_temp(pi, spi_handler, cal_data: OrderedDict) -> Tuple[int, float]:
     """
     温度を読み取る
     """
@@ -84,31 +86,38 @@ def read_temp(pi, spi_handler, cal_data: OrderedDict):
     temp_raw = int.from_bytes(read_bytes, byteorder="big") >> 4
     print(f"temp: bytes={bytes_to_binary(read_bytes)}, temp_raw={temp_raw}")
 
-    #var1 = ((((adc_T>>3) – ((BME280_S32_t)dig_T1<<1))) * ((BME280_S32_t)dig_T2)) >> 11;
-    var1 = (
-        (
-            (temp_raw >> 3) - (cal_data["dig_T1"] << 1)
-        ) * cal_data["dig_T2"]
-    ) >> 11
-
-    #var2 = (((((adc_T>>4) – ((BME280_S32_t)dig_T1)) * ((adc_T>>4) – ((BME280_S32_t)dig_T1))) >> 12) * ((BME280_S32_t)dig_T3)) >> 14;
-    var2 = (
-        (
-            (
-                (
-                    (temp_raw >> 4) - cal_data["dig_T1"]
-                ) * (
-                    (temp_raw >> 4) - cal_data["dig_T1"]
-                )
-            ) >> 12
-        ) * (
-            cal_data["dig_T3"]
-        )
-    ) >> 14
-
+    # 以下キャリブレーション
+    var1 = (((temp_raw >> 3) - (cal_data["dig_T1"] << 1)) * cal_data["dig_T2"]) >> 11
+    var2 = (((((temp_raw >> 4) - cal_data["dig_T1"]) * ((temp_raw >> 4) - cal_data["dig_T1"])) >> 12) * (cal_data["dig_T3"])) >> 14
     t_fine = var1 + var2
     temp = ((t_fine * 5 + 128) >> 8) / 100
-    return temp
+    return (t_fine, temp)
+
+def read_pressure(pi, spi_handler, cal_data: OrderedDict, t_fine: int):
+    read_bytes = read_register(pi, spi_handler, 0xF7, 3)
+    # 気圧は20ビットフォーマットで受信され、正値で32ビット符号付き整数
+    pressure_raw = int.from_bytes(read_bytes, byteorder="big") >> 4
+    print(f"pressure: bytes={bytes_to_binary(read_bytes)}, pressure_raw={pressure_raw}")
+
+    # 以下キャリブレーション
+    var1 = t_fine - 128000
+    var2 = var1 * var1 * cal_data["dig_P6"]
+    var2 = var2 + ((var1 * cal_data["dig_P5"]) << 17)
+    var2 = var2 + ((cal_data["dig_P4"]) << 35)
+    var1 = ((var1 * var1 * cal_data["dig_P3"]) >> 8) + ((var1 * cal_data["dig_P2"]) << 12)
+    var1 = ((1 << 47) + var1) * (cal_data["dig_P1"]) >> 33
+    if (var1 == 0):
+        return 0  # avoid exception caused by division by zero
+    p = 1048576 - pressure_raw
+    p = (((p << 31) - var2) * 3125) // var1
+    var1 = ((cal_data["dig_P9"]) * (p >> 13) * (p >> 13)) >> 25
+    var2 = ((cal_data["dig_P8"]) * p) >> 19
+    p = ((p + var1 + var2) >> 8) + ((cal_data["dig_P7"]) << 4)
+    return p / 256 / 100  # hPa
+
+
+def read_humidity(pi, spi_handler, cal_data: OrderedDict, t_fine: int):
+
 
 
 
@@ -136,10 +145,10 @@ def main(pi, spi_handler):
     cal_data = read_calibration_data(pi, spi_handler)
 
     while True:
-        temp = read_temp(pi, spi_handler, cal_data)
+        t_fine, temp = read_temp(pi, spi_handler, cal_data)
         print(f"temp: {temp}")
-        press = read_register(pi, spi_handler, 0xF7, 3)
-        print(f"press: {bytes_to_binary(press)}")
+        press = read_pressure(pi, spi_handler, cal_data, t_fine)
+        print(f"press: {press}")
         hum = read_register(pi, spi_handler, 0xFD, 2)
         print(f"hum: {bytes_to_binary(hum)}")
         time.sleep(1)
