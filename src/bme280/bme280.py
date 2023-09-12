@@ -84,20 +84,20 @@ def read_temp(pi, spi_handler, cal_data: OrderedDict) -> Tuple[int, float]:
     read_bytes = read_register(pi, spi_handler, temp_register, 3)
     # 温度は20ビットフォーマットで受信され、正値で32ビット符号付き整数
     temp_raw = int.from_bytes(read_bytes, byteorder="big") >> 4
-    print(f"temp: bytes={bytes_to_binary(read_bytes)}, temp_raw={temp_raw}")
+    #print(f"temp: bytes={bytes_to_binary(read_bytes)}, temp_raw={temp_raw}")
 
     # 以下キャリブレーション
     var1 = (((temp_raw >> 3) - (cal_data["dig_T1"] << 1)) * cal_data["dig_T2"]) >> 11
     var2 = (((((temp_raw >> 4) - cal_data["dig_T1"]) * ((temp_raw >> 4) - cal_data["dig_T1"])) >> 12) * (cal_data["dig_T3"])) >> 14
     t_fine = var1 + var2
-    temp = ((t_fine * 5 + 128) >> 8) / 100
+    temp = ((t_fine * 5 + 128) >> 8) / 100  # DegC
     return (t_fine, temp)
 
-def read_pressure(pi, spi_handler, cal_data: OrderedDict, t_fine: int):
+def read_pressure(pi, spi_handler, cal_data: OrderedDict, t_fine: int) -> float:
     read_bytes = read_register(pi, spi_handler, 0xF7, 3)
     # 気圧は20ビットフォーマットで受信され、正値で32ビット符号付き整数
     pressure_raw = int.from_bytes(read_bytes, byteorder="big") >> 4
-    print(f"pressure: bytes={bytes_to_binary(read_bytes)}, pressure_raw={pressure_raw}")
+    #print(f"pressure: bytes={bytes_to_binary(read_bytes)}, pressure_raw={pressure_raw}")
 
     # 以下キャリブレーション
     var1 = t_fine - 128000
@@ -116,9 +116,25 @@ def read_pressure(pi, spi_handler, cal_data: OrderedDict, t_fine: int):
     return p / 256 / 100  # hPa
 
 
-def read_humidity(pi, spi_handler, cal_data: OrderedDict, t_fine: int):
+def read_humidity(pi, spi_handler, cal_data: OrderedDict, t_fine: int) -> float:
+    read_bytes = read_register(pi, spi_handler, 0xFD, 2)
+    # 湿度は16ビットフォーマットで受信され、32ビット符号付き整数で保存
+    humidity_raw = int.from_bytes(read_bytes, byteorder="big")
+    #print(f"pressure: bytes={bytes_to_binary(read_bytes)}, humidity_raw={humidity_raw}")
 
-
+    # 以下キャリブレーション
+    v_x1_u32r = t_fine - 76800
+    v_x1_u32r = (
+        (
+            (((humidity_raw << 14) - ((cal_data["dig_H4"]) << 20) - ((cal_data["dig_H5"]) * v_x1_u32r)) + (16384)) >> 15
+        ) * (
+            ((((((v_x1_u32r * (cal_data["dig_H6"])) >> 10) * (((v_x1_u32r * (cal_data["dig_H3"])) >> 11) + 32768)) >> 10) + 2097152) * (cal_data["dig_H2"]) + 8192) >> 14
+        )
+    )
+    v_x1_u32r = (v_x1_u32r - (((((v_x1_u32r >> 15) * (v_x1_u32r >> 15)) >> 7) * (cal_data["dig_H1"])) >> 4))
+    v_x1_u32r = 0 if (v_x1_u32r < 0) else v_x1_u32r
+    v_x1_u32r = 419430400 if (v_x1_u32r > 419430400) else v_x1_u32r
+    return (v_x1_u32r >> 12) / 1024  # %RH
 
 
 def main(pi, spi_handler):
@@ -145,12 +161,13 @@ def main(pi, spi_handler):
     cal_data = read_calibration_data(pi, spi_handler)
 
     while True:
+        print()
         t_fine, temp = read_temp(pi, spi_handler, cal_data)
-        print(f"temp: {temp}")
+        print(f"temp: {temp} DegC")
         press = read_pressure(pi, spi_handler, cal_data, t_fine)
-        print(f"press: {press}")
-        hum = read_register(pi, spi_handler, 0xFD, 2)
-        print(f"hum: {bytes_to_binary(hum)}")
+        print(f"press: {press} hPa")
+        hum = read_humidity(pi, spi_handler, cal_data, t_fine)
+        print(f"hum: {hum} %RH")
         time.sleep(1)
 
 
