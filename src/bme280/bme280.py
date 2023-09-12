@@ -33,11 +33,6 @@ def read_register(pi, spi_handler, register_addr: int, num_bytes: int) -> bytes:
         raise Exception(f"ReadError: cnt={cnt} (expected={num_bytes+1})")
     return read_data[1:]
 
-def shift_right(n: int, shift: int, mask: BitMask = BitMask.SHORT) -> int:
-    u_n = n & mask
-    v1 = u_n >> shift
-
-
 def read_calibration_data(pi, spi_handler):
     cal_1 = read_register(pi, spi_handler, 0x88, 24)
     cal_2 = read_register(pi, spi_handler, 0xA1, 1)
@@ -52,7 +47,7 @@ def read_calibration_data(pi, spi_handler):
     #    cnt += 1
     #print(f"[0:2]: {bytes_to_binary(cal_1[0:2])}")
 
-    return OrderedDict([
+    cal_data = OrderedDict([
         # --- --- --- 0x88 ~ 0x9F --- --- ---
         ("dig_T1", int.from_bytes(cal_1[0:2]  , byteorder="little", signed=False)),
         ("dig_T2", int.from_bytes(cal_1[2:4]  , byteorder="little", signed=True)),
@@ -74,16 +69,19 @@ def read_calibration_data(pi, spi_handler):
         ("dig_H2", int.from_bytes(cal_3[0:2], byteorder="little", signed=True)),
         ("dig_H3", int.from_bytes(cal_3[2:3], byteorder="little", signed=False)),
         #"dig_H4": cal_3[3] << 4 | (0b00001111 & cal_3[4])
-        ("dig_H4", int.from_bytes(bytes([cal_3[3], (0b00001111 & cal_3[4])]), byteorder="big", signed=True)),
+        # TODO: 間違い ("dig_H4", int.from_bytes(bytes([cal_3[3], (0b00001111 & cal_3[4])]), byteorder="big", signed=True)),
         #"dig_H5":  << 4 | (cal_3[4] >> 4)
-        ("dig_H5", int.from_bytes(bytes([cal_3[5], (0b00001111) & (cal_3[4] >> 4)]), byteorder="big", signed=True)),
+        # TODO: 間違い ("dig_H5", int.from_bytes(bytes([cal_3[5], (0b00001111) & (cal_3[4] >> 4)]), byteorder="big", signed=True)),
         ("dig_H6", int.from_bytes(cal_3[7:8], byteorder="little", signed=True)),
     ])
+    pprint(cal_data)
+    return cal_data
 
 def read_temp(pi, spi_handler, cal_data: OrderedDict):
-    read_bytes = read_register(pi, spi_handler, 0xFA, 3)
+    temp_register = 0xFA
+    read_bytes = read_register(pi, spi_handler, temp_register, 3)
     # 温度は20ビットフォーマットで受信され、正値で32ビット符号付き整数
-    temp_raw = int.from_bytes(read_bytes, "big") >> 4
+    temp_raw = int.from_bytes(read_bytes, byteorder="big") >> 4
     print(f"temp: bytes={bytes_to_binary(read_bytes)}, temp_raw={temp_raw}")
 
     #var1 = ((((adc_T>>3) – ((BME280_S32_t)dig_T1<<1))) * ((BME280_S32_t)dig_T2)) >> 11;
@@ -136,7 +134,6 @@ def main(pi, spi_handler):
 
     # キャリブレーションデータ
     cal_data = read_calibration_data(pi, spi_handler)
-    pprint(cal_data)
 
     while True:
         temp = read_temp(pi, spi_handler, cal_data)
