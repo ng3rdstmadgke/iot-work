@@ -1,23 +1,22 @@
 import time
-from typing import Union
+from typing import Union, List
 import pigpio
 from pprint import pprint
 from collections import OrderedDict
 import enum
 
-class BitMask(int, enum.Enum):
-    SHORT = 0b1111111111111111
-    INT = 0b11111111111111111111111111111111
-    LONG = 0b1111111111111111111111111111111111111111111111111111111111111111
 
-def int_to_binary(n: int, bits: int = 8):
+def int_to_binary(n: int, bits: int = 8) -> str:
     return ''.join([str(n >> i & 1 ) for i in reversed(range(0, bits))])
 
-def bytes_to_binary(data: Union[bytearray,bytes]):
-    return ','.join([int_to_binary(byte) for byte in data])
+def bytes_to_binary(data: Union[bytearray,bytes]) -> List[str]:
+    return [int_to_binary(byte) for byte in data]
 
 
 def write_register(pi, spi_handler, register_addr: int, data: int):
+    """
+    レジスターに設定を書き込む
+    """
     # 書込み時のregister指定は最上位ビットを0にする
     write_data = (register_addr & 0b01111111) << 8 | data
     write_data = write_data.to_bytes(2, "big")
@@ -25,6 +24,9 @@ def write_register(pi, spi_handler, register_addr: int, data: int):
     print(f"cnt={cnt}, read_data={bytes_to_binary(read_data)}")
 
 def read_register(pi, spi_handler, register_addr: int, num_bytes: int) -> bytes:
+    """
+    レジスターから指定したバイト数読み取る
+    """
     # 読込み時のregister指定は最上位ビットを1にする
     write_data = (register_addr | 0b10000000) << (8 * num_bytes)
     write_data = write_data.to_bytes(num_bytes + 1, "big")
@@ -34,18 +36,15 @@ def read_register(pi, spi_handler, register_addr: int, num_bytes: int) -> bytes:
     return read_data[1:]
 
 def read_calibration_data(pi, spi_handler):
+    """
+    キャリブレーション用のデータを取得する
+    """
     cal_1 = read_register(pi, spi_handler, 0x88, 24)
     cal_2 = read_register(pi, spi_handler, 0xA1, 1)
     cal_3 = read_register(pi, spi_handler, 0xE1, 7)
-    #print(f"0x88 ~ 0x9F: {bytes_to_binary(cal_1)}")
-    #print(f"0xA1: {bytes_to_binary(cal_2)}")
-    #print(f"0xE1 ~ 0xE7: {bytes_to_binary(cal_3)}")
-
-    #cnt = 0
-    #for b in cal_1:
-    #    print(f"{cnt}: {int_to_binary(b)}")
-    #    cnt += 1
-    #print(f"[0:2]: {bytes_to_binary(cal_1[0:2])}")
+    print(f"0x88 ~ 0x9F: {bytes_to_binary(cal_1)}")
+    print(f"0xA1: {bytes_to_binary(cal_2)}")
+    print(f"0xE1 ~ 0xE7: {bytes_to_binary(cal_3)}")
 
     cal_data = OrderedDict([
         # --- --- --- 0x88 ~ 0x9F --- --- ---
@@ -68,16 +67,17 @@ def read_calibration_data(pi, spi_handler):
         # --- --- --- 0xE1 ~ 0xE7 --- --- ---
         ("dig_H2", int.from_bytes(cal_3[0:2], byteorder="little", signed=True)),
         ("dig_H3", int.from_bytes(cal_3[2:3], byteorder="little", signed=False)),
-        #"dig_H4": cal_3[3] << 4 | (0b00001111 & cal_3[4])
-        # TODO: 間違い ("dig_H4", int.from_bytes(bytes([cal_3[3], (0b00001111 & cal_3[4])]), byteorder="big", signed=True)),
-        #"dig_H5":  << 4 | (cal_3[4] >> 4)
-        # TODO: 間違い ("dig_H5", int.from_bytes(bytes([cal_3[5], (0b00001111) & (cal_3[4] >> 4)]), byteorder="big", signed=True)),
+        ("dig_H4", cal_3[3] << 4 | (0b00001111 & cal_3[4])),
+        ("dig_H5", cal_3[5] << 4 | (0b00001111 & (cal_3[4] >> 4))),
         ("dig_H6", int.from_bytes(cal_3[7:8], byteorder="little", signed=True)),
     ])
     pprint(cal_data)
     return cal_data
 
 def read_temp(pi, spi_handler, cal_data: OrderedDict):
+    """
+    温度を読み取る
+    """
     temp_register = 0xFA
     read_bytes = read_register(pi, spi_handler, temp_register, 3)
     # 温度は20ビットフォーマットで受信され、正値で32ビット符号付き整数
