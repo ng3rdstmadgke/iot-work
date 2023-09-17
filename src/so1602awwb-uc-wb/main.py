@@ -9,16 +9,16 @@ from pprint import pprint
 from collections import OrderedDict
 import enum
 
-def write_command(pi, i2c_handler, command: int):
-    control_byte = 0b00000000
-    pi.i2c_write_device(i2c_handler, bytes([control_byte, command]))
-    sleep(0.01)
-
-
 def write_data(pi, i2c_handler, data: int):
     control_byte = 0b01000000
     pi.i2c_write_device(i2c_handler, bytes([control_byte, data]))
     sleep(0.001)
+
+
+def write_command(pi, i2c_handler, command: int):
+    control_byte = 0b00000000
+    pi.i2c_write_device(i2c_handler, bytes([control_byte, command]))
+    sleep(0.01)
 
 
 def init(pi, i2c_handler):
@@ -32,11 +32,20 @@ def init(pi, i2c_handler):
     write_command(pi, i2c_handler, 0b00000001)  # Clear Display
     sleep(0.02)
 
+def off(pi, i2c_handler):
+    sleep(0.1)
+    write_command(pi, i2c_handler, 0b00000001)  # Clear Display
+    sleep(0.02)
+    write_command(pi, i2c_handler, 0b00000010)  # Return Home
+    sleep(0.002)
+    write_command(pi, i2c_handler, 0b00001000)  # Display, cursor, blink = OFF
+
+
 
 def main(pi, i2c_handler):
-    init(pi, i2c_handler)
 
-    text = b"hello world"
+    # 1文字書き込むとカーソルがインクリメントされる
+    text = b"24.34C 1012hPa"
     for b in text:
         write_data(pi, i2c_handler, b)
 
@@ -52,8 +61,6 @@ def main(pi, i2c_handler):
     write_command(pi, i2c_handler, 0b11111111)  # 輝度 max
     write_command(pi, i2c_handler, 0b01111000)  # SD=0
     write_command(pi, i2c_handler, 0b00101000)  # 2C=高文字 28=ノーマル
-    sleep(10)
-
 
 
 if __name__ == "__main__":
@@ -64,10 +71,13 @@ if __name__ == "__main__":
     i2c_bus = 1
     i2c_address = 0x3C  # SA0=L (SA0=Hの場合は0x3D)  (i2cdetect 1コマンドで確認)
     i2c_flags = 0x0
-
     i2c_handler = pi.i2c_open(i2c_bus, i2c_address)
     try:
+        init(pi, i2c_handler)
         main(pi, i2c_handler)
+        sleep(10)
+        off(pi, i2c_handler)
+        sleep(1)
     finally:
         pi.i2c_close(i2c_handler)
         pi.stop()
