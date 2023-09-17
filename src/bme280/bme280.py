@@ -24,7 +24,7 @@ def write_register(pi, spi_handler, register_addr: int, data: int):
     write_data = (register_addr & 0b01111111) << 8 | data
     write_data = write_data.to_bytes(2, "big")
     cnt, read_data = pi.spi_xfer(spi_handler, write_data)
-    print(f"cnt={cnt}, read_data={bytes_to_binary(read_data)}")
+    #print(f"cnt={cnt}, read_data={bytes_to_binary(read_data)}")
 
 
 def read_register(pi, spi_handler, register_addr: int, num_bytes: int) -> bytes:
@@ -47,9 +47,9 @@ def read_calibration_data(pi, spi_handler):
     cal_1 = read_register(pi, spi_handler, 0x88, 24)
     cal_2 = read_register(pi, spi_handler, 0xA1, 1)
     cal_3 = read_register(pi, spi_handler, 0xE1, 7)
-    print(f"0x88 ~ 0x9F: {bytes_to_binary(cal_1)}")
-    print(f"0xA1: {bytes_to_binary(cal_2)}")
-    print(f"0xE1 ~ 0xE7: {bytes_to_binary(cal_3)}")
+    #print(f"0x88 ~ 0x9F: {bytes_to_binary(cal_1)}")
+    #print(f"0xA1: {bytes_to_binary(cal_2)}")
+    #print(f"0xE1 ~ 0xE7: {bytes_to_binary(cal_3)}")
 
     cal_data = OrderedDict([
         # --- --- --- 0x88 ~ 0x9F --- --- ---
@@ -76,7 +76,7 @@ def read_calibration_data(pi, spi_handler):
         ("dig_H5", cal_3[5] << 4 | (0b00001111 & (cal_3[4] >> 4))),
         ("dig_H6", int.from_bytes(cal_3[7:8], byteorder="little", signed=True)),
     ])
-    pprint(cal_data)
+    #pprint(cal_data)
     return cal_data
 
 
@@ -169,13 +169,13 @@ def main(pi, spi_handler):
     cal_data = read_calibration_data(pi, spi_handler)
 
     while True:
-        print()
         t_fine, temp = read_temp(pi, spi_handler, cal_data)
         print(f"temp: {temp} DegC")
         press = read_pressure(pi, spi_handler, cal_data, t_fine)
         print(f"press: {press} hPa")
         hum = read_humidity(pi, spi_handler, cal_data, t_fine)
         print(f"hum: {hum} %RH")
+        print()
         time.sleep(1)
 
 
