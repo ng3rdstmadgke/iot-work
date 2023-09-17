@@ -11,6 +11,7 @@ import enum
 def int_to_binary(n: int, bits: int = 8) -> str:
     return ''.join([str(n >> i & 1 ) for i in reversed(range(0, bits))])
 
+
 def bytes_to_binary(data: Union[bytearray,bytes]) -> List[str]:
     return [int_to_binary(byte) for byte in data]
 
@@ -25,6 +26,7 @@ def write_register(pi, spi_handler, register_addr: int, data: int):
     cnt, read_data = pi.spi_xfer(spi_handler, write_data)
     print(f"cnt={cnt}, read_data={bytes_to_binary(read_data)}")
 
+
 def read_register(pi, spi_handler, register_addr: int, num_bytes: int) -> bytes:
     """
     レジスターから指定したバイト数読み取る
@@ -36,6 +38,7 @@ def read_register(pi, spi_handler, register_addr: int, num_bytes: int) -> bytes:
     if cnt != (num_bytes + 1):
         raise Exception(f"ReadError: cnt={cnt} (expected={num_bytes+1})")
     return read_data[1:]
+
 
 def read_calibration_data(pi, spi_handler):
     """
@@ -76,6 +79,7 @@ def read_calibration_data(pi, spi_handler):
     pprint(cal_data)
     return cal_data
 
+
 def read_temp(pi, spi_handler, cal_data: OrderedDict) -> Tuple[int, float]:
     """
     温度を読み取る
@@ -92,6 +96,7 @@ def read_temp(pi, spi_handler, cal_data: OrderedDict) -> Tuple[int, float]:
     t_fine = var1 + var2
     temp = ((t_fine * 5 + 128) >> 8) / 100  # DegC
     return (t_fine, temp)
+
 
 def read_pressure(pi, spi_handler, cal_data: OrderedDict, t_fine: int) -> float:
     read_bytes = read_register(pi, spi_handler, 0xF7, 3)
@@ -138,24 +143,27 @@ def read_humidity(pi, spi_handler, cal_data: OrderedDict, t_fine: int) -> float:
 
 
 def main(pi, spi_handler):
-    # 湿度の設定
-    osrs_h = 1    # Humidity oversampling x 1
-    ctrl_hum_reg  = osrs_h
-    write_register(pi, spi_handler, 0xF2, ctrl_hum_reg)
+    # 動作設定
+    config_reg = 0x5F
+    t_sb = 0b000    # 測定待機時間 0.5ms
+    filter = 0b101  # IIRフィルター係数 16
+    spi3w_en = 0b0  # 4線式SPI
+    reg_data    = (t_sb << 5) | (filter << 2) | spi3w_en
+    write_register(pi, spi_handler, config_reg, reg_data)
 
-    # 温度と気圧の設定
-    osrs_t = 1    # Temperature oversampling x 1
-    osrs_p = 1    # Pressure oversampling x 1
-    mode = 3      # Normal mode
-    ctrl_meas_reg = (osrs_t << 5) | (osrs_p << 2) | mode
-    write_register(pi, spi_handler, 0xF4, ctrl_meas_reg)
+    # 温度・気圧測定の設定
+    ctrl_meas_reg = 0xF4
+    osrs_t = 0b010  # 温度 オーバーサンプリングx2
+    osrs_p = 0b101  # 気圧 オーバーサンプリングx16
+    mode = 0b11     # ノーマルモード
+    reg_data = (osrs_t << 5) | (osrs_p << 2) | mode
+    write_register(pi, spi_handler, ctrl_meas_reg, reg_data)
 
-    # その他の設定
-    t_sb = 5      # Tstandby 1000ms
-    filter = 0    # Filter off 
-    spi3w_en = 0  # 3-wire SPI Disable
-    config_reg    = (t_sb << 5) | (filter << 2) | spi3w_en
-    write_register(pi, spi_handler, 0xF5, config_reg)
+    # 湿度測定の設定
+    ctrl_hum_reg = 0xF2
+    osrs_h = 0b001  # 湿度 オーバーサンプリングx1
+    reg_data  = osrs_h
+    write_register(pi, spi_handler, ctrl_hum_reg, reg_data)
 
     # キャリブレーションデータ
     cal_data = read_calibration_data(pi, spi_handler)
@@ -184,15 +192,13 @@ if __name__ == "__main__":
     # A: メインSPI(0), AuxSPI(1) どちらを利用するか選択
     # W: 3線のSPIを利用するなら(1)、4線なら(0) (メインSPIでしか利用できない)
     # あとは使いどころあるのかよくわからん、、、
-    SPI_MODE = 0b11  # SPIモード0を設定。アイドル時のクロックはHIGH(CPOL=1)、クロックがLOWになるときにデータをサンプリング(CPHA=1)
-    OPTION = 0b0 | SPI_MODE
-    CLOCK_SPEED = 1_000_000  # 1MHz
-    SPI_CHANNEL = 0
-    spi_handler = pi.spi_open(SPI_CHANNEL, CLOCK_SPEED, OPTION)
-
+    spi_mode = 0b11  # SPIモード11を設定。アイドル時のクロックはHIGH(CPOL=1)、クロックがLOWになるときにデータをサンプリング(CPHA=1)
+    spi_option = 0b0 | spi_mode
+    spi_clock_speed = 1_000_000  # 1MHz
+    spi_channel = 0
+    spi_handler = pi.spi_open(spi_channel, spi_clock_speed, spi_option)
     try:
         main(pi, spi_handler)
-
     finally:
         pi.spi_close(spi_handler)
         pi.stop()
