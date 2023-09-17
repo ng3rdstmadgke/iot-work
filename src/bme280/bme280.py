@@ -43,6 +43,7 @@ def read_register(pi, spi_handler, register_addr: int, num_bytes: int) -> bytes:
 def read_calibration_data(pi, spi_handler):
     """
     キャリブレーション用のデータを取得する
+    データシートの「4.2.2 Trimming parameter readout」を参照
     """
     cal_1 = read_register(pi, spi_handler, 0x88, 24)
     cal_2 = read_register(pi, spi_handler, 0xA1, 1)
@@ -90,7 +91,7 @@ def read_temp(pi, spi_handler, cal_data: OrderedDict) -> Tuple[int, float]:
     temp_raw = int.from_bytes(read_bytes, byteorder="big") >> 4
     #print(f"temp: bytes={bytes_to_binary(read_bytes)}, temp_raw={temp_raw}")
 
-    # 以下キャリブレーション
+    # 以下キャリブレーション (データシートの「4.2.3 Compensation formulas」を参照)
     var1 = (((temp_raw >> 3) - (cal_data["dig_T1"] << 1)) * cal_data["dig_T2"]) >> 11
     var2 = (((((temp_raw >> 4) - cal_data["dig_T1"]) * ((temp_raw >> 4) - cal_data["dig_T1"])) >> 12) * (cal_data["dig_T3"])) >> 14
     t_fine = var1 + var2
@@ -104,7 +105,7 @@ def read_pressure(pi, spi_handler, cal_data: OrderedDict, t_fine: int) -> float:
     pressure_raw = int.from_bytes(read_bytes, byteorder="big") >> 4
     #print(f"pressure: bytes={bytes_to_binary(read_bytes)}, pressure_raw={pressure_raw}")
 
-    # 以下キャリブレーション
+    # 以下キャリブレーション (データシートの「4.2.3 Compensation formulas」を参照)
     var1 = t_fine - 128000
     var2 = var1 * var1 * cal_data["dig_P6"]
     var2 = var2 + ((var1 * cal_data["dig_P5"]) << 17)
@@ -127,7 +128,7 @@ def read_humidity(pi, spi_handler, cal_data: OrderedDict, t_fine: int) -> float:
     humidity_raw = int.from_bytes(read_bytes, byteorder="big")
     #print(f"pressure: bytes={bytes_to_binary(read_bytes)}, humidity_raw={humidity_raw}")
 
-    # 以下キャリブレーション
+    # 以下キャリブレーション (データシートの「4.2.3 Compensation formulas」を参照)
     v_x1_u32r = t_fine - 76800
     v_x1_u32r = (
         (
@@ -170,11 +171,11 @@ def main(pi, spi_handler):
 
     while True:
         t_fine, temp = read_temp(pi, spi_handler, cal_data)
-        print(f"temp: {temp} DegC")
+        print(f"温度: {temp} DegC")
         press = read_pressure(pi, spi_handler, cal_data, t_fine)
-        print(f"press: {press} hPa")
+        print(f"気圧: {press} hPa")
         hum = read_humidity(pi, spi_handler, cal_data, t_fine)
-        print(f"hum: {hum} %RH")
+        print(f"湿度: {hum} %RH")
         print()
         time.sleep(1)
 
