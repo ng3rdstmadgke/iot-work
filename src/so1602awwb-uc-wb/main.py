@@ -60,7 +60,6 @@ def init(pi, i2c_handler):
     #     (0) ディスプレイのシフトを行わない (default)
     write_command(pi, i2c_handler, 0b00000110)  # シフト設定をデフォルト値に
 
-
     # Function Set (IS=0, RE=1, SD=0)
     #   機能設定
     #   0 0 0 1 * N DH RE(0) REV
@@ -100,6 +99,7 @@ def init(pi, i2c_handler):
     #     (1) 利用する
     #     (0) 利用しない
     write_command(pi, i2c_handler, 0b01111000)  # SD=0
+    # IS=0, RE=1, SD=0
 
     # Function Set (IS=X, RE=0, SD=0)
     #   機能設定
@@ -151,9 +151,9 @@ def disp_01(pi, i2c_handler):
 def disp_02(pi, i2c_handler):
     """
     繰り返し表示
+    ※ 17 ~ 20 文字の表示で利用
     """
     # 設定
-
 
     l1 = b"Temp  Pres Hum"  # 20byteまで保持できる
     for char in l1:
@@ -166,7 +166,6 @@ def disp_02(pi, i2c_handler):
         write_data(pi, i2c_handler, ch)  # 0xB1 = ア
     
     while (True):
-
         # Cursor or Display Shift (IS=0, RE=0, SD=0)
         #   カーソル位置の移動設定
         #   0 0 0 1 S/C R/L * *
@@ -180,6 +179,10 @@ def disp_02(pi, i2c_handler):
         sleep(0.5)
 
 def disp_03(pi, i2c_handler):
+    """
+    スクロール表示
+    ※ 長文の表示で利用
+    """
     l1 = b"Text:"
     for char in l1:
         write_data(pi, i2c_handler, char)
@@ -197,54 +200,109 @@ def disp_03(pi, i2c_handler):
     write_command(pi, i2c_handler, 0b00000111)
 
 
-    l2 = b"The returned value is a tuple of the number of bytes read and a bytearray containing the bytes. If there was an error the number of bytes read will be less than zero (and will contain the error code)."
-    l2 += (b" " * (len(l2) % 20 + 20))
-    
-    for i, char in enumerate(l2):
-        if (i % 20 == 0):
-            # Set DDRAM RAM Address (IS=0, RE=X, SD=0)
-            #   DDRAMアドレスを設定
-            #   1 N N N N N N N
-            #   - N: アドレスを指定 1行目(0x00 - 0x0F) 2行目(0x20 - 0x2F)
-            write_command(pi, i2c_handler, 0b10100000)  # 2行目の先頭 (0x20)
-        write_data(pi, i2c_handler, char)
-        sleep(0.1)
-    
+    l2 = b"If there was an error the number of bytes read will be less than zero (and will contain the error code)."
+    l2 += (b" " * (len(l2) % 20))
+
+    idx = 0
+    while (True):
+        for char in l2:
+            if (idx % 20 == 0):  # 20文字ごとにDDRAMをリセット
+                # Set DDRAM RAM Address (IS=0, RE=X, SD=0)
+                #   DDRAMアドレスを設定
+                #   1 N N N N N N N
+                #   - N: アドレスを指定 1行目(0x00 - 0x0F) 2行目(0x20 - 0x2F)
+                write_command(pi, i2c_handler, 0b10100000)  # 2行目の先頭 (0x20)
+
+            write_data(pi, i2c_handler, char)
+            sleep(0.1)
+            idx += 1
 
 def disp_04(pi, i2c_handler):
     """
-    スクロール表示
+    スクロール表示 (1行目固定)
+    ※ 長文の表示で利用
     """
-    # 設定
-
-    write_command(pi, i2c_handler, 0b00101010)  # RE=1 (Function Set)
-    # IS=0, RE=1, SD=0
-    write_command(pi, i2c_handler, 0b00011101)  # display_shift_enable (Double Height(4line)/Display-dot shift)
-
-    write_command(pi, i2c_handler, 0b00101001)  # RE=0, IS=1 (Function Set)
-    write_command(pi, i2c_handler, 0b00101010)  # RE=1 (Function Set)
-    # IS=1, RE=1, SD=0
-    #write_command(pi, i2c_handler, 0b00010010)  # enble_line2_shifrt (Display shift/scroll)
-
-    write_command(pi, i2c_handler, 0b00101000)  # RE=0, IS=0 (Function Set)
-    # IS=0, RE=0, SD=0
-
-    write_command(pi, i2c_handler, 0b00101000)  # bit2 (1: Double height, 0: Single height) (Function Set)
-    # IS=0, RE=0, SD=0
-
-    #ddram_addr = 0b00000000  # 1行目の先頭 (0x00)
-    #write_command(pi, i2c_handler, 0b10000000 | ddram_addr)  # Set DDRAM RAM Address
-    l1 = b"Temp  Pres Hum"
+    l1 = b"Text:"
     for char in l1:
         write_data(pi, i2c_handler, char)
+    sleep(1)
 
-    ddram_addr = 0b00100000  # 2行目の先頭 (0x20)
-    write_command(pi, i2c_handler, 0b10000000 | ddram_addr)  # Set DDRAM RAM Address
-    l2 = b"24.34 1012 50.35"
-    for ch in l2:
-        write_data(pi, i2c_handler, ch)  # 0xB1 = ア
-    
-    sleep(10)
+    # Entry Mode Set (IS=0, RE=0, SD=0)
+    #   データ書き込み時のカーソルの移動方向の設定
+    #   0 0 0 0 0 1 I/D S
+    #   - I/D:
+    #     (1) カーソルが右に移動しDDRAMアドレスがインクリメント (default)
+    #     (0) カーソルが左に移動しDDRAMアドレスがデクリメント
+    #   - S: ディスプレイ全体のシフト
+    #     (1) I/D=1ならディスプレイ全体が右にシフト。I/D=0なら左にシフト。
+    #     (0) ディスプレイのシフトを行わない (default)
+    write_command(pi, i2c_handler, 0b00000111)
+
+    write_command(pi, i2c_handler, 0b00101010)  # RE=1
+    # IS=0, RE=1, SD=0
+
+    # Double Height(4line)/Display-dot shift (IS=0, RE=1, SD=0)
+    #   0 0  0 1 UD2 UD1 * DH'
+    #   - UD2,UD2: あまり関係ないので 11 (default)
+    #   - DH': 選択した行だけディスプレイシフトを行う設定の有効・無効
+    #     (1) 有効化 (ディスプレイシフト)
+    #     (0) 無効化 (スクロール) (default)
+    write_command(pi, i2c_handler, 0b00011101)
+
+    write_command(pi, i2c_handler, 0b00101001)  # RE=0, IS=1
+    write_command(pi, i2c_handler, 0b00101010)  # RE=1
+    # IS=1, RE=1, SD=0
+
+    # Shift / Scroll Enable (IS=1, RE=1, SD=0)
+    #   0 0 0 1 DS4/HS4 DS3/HS3 DS2/HS2 DS1/HS1
+    #   - DS/HS: 1111 (default)
+    #     - DS4 ~ DS1: DH'=1の場合は、行毎のディスプレイシフトを有効化
+    #     - HS4 ~ HS1: DH'=0の場合は、行毎の水平スクロールを有効化
+    write_command(pi, i2c_handler, 0b00010010)  # display shift enable line2
+
+    write_command(pi, i2c_handler, 0b00101000)  # RE=0, IS=0
+
+
+    try:
+        l2 = b"If there was an error the number of bytes read will be less than zero (and will contain the error code)."
+        l2 += (b" " * (len(l2) % 20))
+        idx = 0
+        while (True):
+            for char in l2:
+                if (idx % 20 == 0):  # 20文字ごとにDDRAMをリセット
+                    # Set DDRAM RAM Address (IS=0, RE=X, SD=0)
+                    #   DDRAMアドレスを設定
+                    #   1 N N N N N N N
+                    #   - N: アドレスを指定 1行目(0x00 - 0x0F) 2行目(0x20 - 0x2F)
+                    write_command(pi, i2c_handler, 0b10100000)  # 2行目の先頭 (0x20)
+
+                write_data(pi, i2c_handler, char)
+                sleep(0.1)
+                idx += 1
+    finally:
+        write_command(pi, i2c_handler, 0b00101010)  # RE=1
+        # IS=0, RE=1, SD=0
+
+        # Double Height(4line)/Display-dot shift (IS=0, RE=1, SD=0)
+        #   0 0  0 1 UD2 UD1 * DH'
+        #   - UD2,UD2: あまり関係ないので 11 (default)
+        #   - DH': 選択した行だけディスプレイシフトを行う設定の有効・無効
+        #     (1) 有効化 (ディスプレイシフト)
+        #     (0) 無効化 (スクロール) (default)
+        write_command(pi, i2c_handler, 0b00011101)
+
+        write_command(pi, i2c_handler, 0b00101001)  # RE=0, IS=1
+        write_command(pi, i2c_handler, 0b00101010)  # RE=1
+        # IS=1, RE=1, SD=0
+
+        # Shift / Scroll Enable (IS=1, RE=1, SD=0)
+        #   0 0 0 1 DS4/HS4 DS3/HS3 DS2/HS2 DS1/HS1
+        #   - DS/HS: 1111 (default)
+        #     - DS4 ~ DS1: DH'=1の場合は、行毎のディスプレイシフトを有効化
+        #     - HS4 ~ HS1: DH'=0の場合は、行毎の水平スクロールを有効化
+        write_command(pi, i2c_handler, 0b00011111)  # display shift enable line2
+
+        write_command(pi, i2c_handler, 0b00101000)  # RE=0, IS=0
 
 
 if __name__ == "__main__":
@@ -259,8 +317,9 @@ if __name__ == "__main__":
     try:
         init(pi, i2c_handler)
         #disp_01(pi, i2c_handler)
-        #disp_02(pi, i2c_handler)
-        disp_03(pi, i2c_handler)
+        disp_02(pi, i2c_handler)
+        #disp_03(pi, i2c_handler)
+        #disp_04(pi, i2c_handler)
         sleep(10)
     finally:
         off(pi, i2c_handler)
