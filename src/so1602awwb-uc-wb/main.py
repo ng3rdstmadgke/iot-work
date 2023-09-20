@@ -6,11 +6,7 @@
 # LCDの使い方(AE-AQM1602A)基礎編:
 #   https://nobita-rx7.hatenablog.com/entry/27983030
 from time import sleep
-from typing import Union, List, Tuple
 import pigpio
-from pprint import pprint
-from collections import OrderedDict
-import enum
 
 def write_data(pi, i2c_handler, data: int):
     control_byte = 0b01000000
@@ -317,9 +313,9 @@ if __name__ == "__main__":
     try:
         init(pi, i2c_handler)
         #disp_01(pi, i2c_handler)
-        disp_02(pi, i2c_handler)
+        #disp_02(pi, i2c_handler)
         #disp_03(pi, i2c_handler)
-        #disp_04(pi, i2c_handler)
+        disp_04(pi, i2c_handler)
         sleep(10)
     finally:
         off(pi, i2c_handler)
